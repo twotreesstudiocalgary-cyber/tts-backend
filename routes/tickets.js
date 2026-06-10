@@ -25,6 +25,7 @@ const getTicketWithDetails = async (id) => {
 
   const [invoices] = await execute('SELECT * FROM invoices WHERE ticket_id = ? ORDER BY created_at DESC LIMIT 1', [id])
   const [selectedOptions] = await execute('SELECT * FROM ticket_selected_options WHERE ticket_id = ?', [id]).catch(() => [[], []])
+  const [internalNotes] = await execute('SELECT * FROM internal_notes WHERE ticket_id = ? ORDER BY created_at ASC', [id]).catch(() => [[], []])
 
   // Enrich comments with author names
   for (const comment of comments) {
@@ -45,7 +46,8 @@ const getTicketWithDetails = async (id) => {
     comments,
     invoice: invoices[0] || null,
     attachments: [],
-    selected_options: selectedOptions || []
+    selected_options: selectedOptions || [],
+    internal_notes: internalNotes || []
   }
 }
 
@@ -182,10 +184,23 @@ router.put('/:id/assign', authenticate, requireAdmin, async (req, res) => {
   }
 })
 
-// PUT /api/tickets/:id/note
-router.put('/:id/note', authenticate, requireAdmin, async (req, res) => {
+// POST /api/tickets/:id/note - add internal note to thread
+router.post('/:id/note', authenticate, requireAdmin, async (req, res) => {
   try {
-    await execute('UPDATE tickets SET internal_note = ? WHERE id = ?', [req.body.note || '', req.params.id])
+    const { text } = req.body
+    if (!text?.trim()) return res.status(400).json({ message: 'Note text is required' })
+    const id = uuidv4()
+    const authorName = req.user.name || 'Team'
+    await execute(
+      'INSERT INTO internal_notes (id, ticket_id, author_id, author_name, text) VALUES (?, ?, ?, ?, ?)',
+      [id, req.params.id, req.user.id, authorName, text.trim()]
+    )
+    res.status(201).json({ note: { id, ticket_id: req.params.id, author_id: req.user.id, author_name: authorName, text: text.trim(), created_at: new Date() } })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
     res.json({ message: 'Note saved' })
   } catch (err) {
     res.status(500).json({ message: 'Server error' })
