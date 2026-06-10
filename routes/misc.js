@@ -279,6 +279,16 @@ router.delete('/recurring-tickets/:id', authenticate, requireSuperAdmin, async (
   } catch (err) { res.status(500).json({ message: 'Server error' }) }
 })
 
+// PUT /api/recurring-tickets/:id
+router.put('/recurring-tickets/:id', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { title, type, priority, description, assignee_id } = req.body
+    await execute('UPDATE recurring_tickets SET title = ?, type = ?, priority = ?, description = ?, assignee_id = ? WHERE id = ?',
+      [title, type, priority || 'normal', description || '', assignee_id || null, req.params.id])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
 // POST /api/recurring-tickets/run-now
 router.post('/recurring-tickets/run-now', authenticate, requireSuperAdmin, async (req, res) => {
   try {
@@ -286,17 +296,16 @@ router.post('/recurring-tickets/run-now', authenticate, requireSuperAdmin, async
     const [templates] = await execute('SELECT * FROM recurring_tickets WHERE active = 1')
     let created = 0
     for (const tmpl of templates) {
-      const [clients] = await execute("SELECT id, name FROM clients WHERE status = 'active' AND customer_type = 'support_plan'")
-      for (const client of clients) {
-        const id = uuidv4()
-        await execute(
-          'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [id, tmpl.title, tmpl.type, tmpl.priority, tmpl.description || '', client.id, tmpl.assignee_id || null]
-        )
-        created++
-      }
+      // Create ONE global ticket per template (not per client)
+      const id = uuidv4()
+      await execute(
+        'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id, is_global) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+        [id, tmpl.title, tmpl.type, tmpl.priority, tmpl.description || '', 'global', tmpl.assignee_id || null]
+      )
+      await execute('UPDATE recurring_tickets SET last_run = NOW() WHERE id = ?', [tmpl.id])
+      created++
     }
-    res.json({ success: true, created, message: `Created ${created} ticket(s)` })
+    res.json({ success: true, created, message: `Created ${created} ticket(s) for all support plan clients` })
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Server error' })
