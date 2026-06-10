@@ -36,6 +36,7 @@ const initDB = async () => {
     await pool.query(`ALTER TABLE tickets ALTER COLUMN ticket_number SET DEFAULT nextval('ticket_number_seq')`).catch(() => {})
     await pool.query(`CREATE TABLE IF NOT EXISTS comments (id VARCHAR(36) PRIMARY KEY, ticket_id VARCHAR(36) NOT NULL, author_id VARCHAR(36) NOT NULL, author_type VARCHAR(20) NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
     await pool.query(`CREATE TABLE IF NOT EXISTS invoices (id VARCHAR(36) PRIMARY KEY, ticket_id VARCHAR(36) NOT NULL, amount DECIMAL(10,2) NOT NULL, status VARCHAR(20) DEFAULT 'unpaid', paid_at TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
+    await pool.query(`CREATE TABLE IF NOT EXISTS recurring_tickets (id VARCHAR(36) PRIMARY KEY, title VARCHAR(255) NOT NULL, type VARCHAR(100) NOT NULL, priority VARCHAR(20) DEFAULT 'normal', description TEXT, assignee_id VARCHAR(36), scope VARCHAR(20) DEFAULT 'support_plan', active SMALLINT DEFAULT 1, created_by VARCHAR(36), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
     await pool.query(`CREATE TABLE IF NOT EXISTS internal_notes (id VARCHAR(36) PRIMARY KEY, ticket_id VARCHAR(36) NOT NULL, author_id VARCHAR(36) NOT NULL, author_name VARCHAR(100) NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
     await pool.query(`CREATE TABLE IF NOT EXISTS password_resets (id VARCHAR(36) PRIMARY KEY, email VARCHAR(150) NOT NULL, token VARCHAR(255) NOT NULL, expires_at TIMESTAMP NOT NULL, used SMALLINT DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
     console.log('✅ Database tables ready')
@@ -62,5 +63,3 @@ const initDB = async () => {
     throw err
   }
 }
-
-module.exports = { pool, initDB, execute }
