@@ -200,11 +200,7 @@ router.post('/:id/note', authenticate, requireAdmin, async (req, res) => {
     console.error(err)
     res.status(500).json({ message: 'Server error' })
   }
-})
-    res.json({ message: 'Note saved' })
-  } catch (err) {
-    res.status(500).json({ message: 'Server error' })
-  }
+
 })
 
 // DELETE /api/tickets/:id
