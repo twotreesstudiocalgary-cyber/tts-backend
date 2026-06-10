@@ -57,14 +57,30 @@ router.get('/', authenticate, async (req, res) => {
     let query, params = []
 
     if (req.user.role === 'client') {
-      query = `SELECT t.*, c.name as client_name, c.company as client_company, u.name as assignee_name,
-        i.amount as invoice_amount, i.status as invoice_status
-        FROM tickets t
-        LEFT JOIN clients c ON t.client_id = c.id
-        LEFT JOIN users u ON t.assignee_id = u.id
-        LEFT JOIN invoices i ON i.ticket_id = t.id
-        WHERE t.client_id = ? ORDER BY t.updated_at DESC`
-      params = [req.user.id]
+      // Check if client is on support plan
+      const [clientRows] = await execute('SELECT customer_type FROM clients WHERE id = ?', [req.user.id])
+      const isOnSupportPlan = clientRows[0]?.customer_type === 'support_plan'
+
+      if (isOnSupportPlan) {
+        // Show own tickets + global recurring tickets
+        query = `SELECT t.*, c.name as client_name, c.company as client_company, u.name as assignee_name,
+          i.amount as invoice_amount, i.status as invoice_status
+          FROM tickets t
+          LEFT JOIN clients c ON t.client_id = c.id
+          LEFT JOIN users u ON t.assignee_id = u.id
+          LEFT JOIN invoices i ON i.ticket_id = t.id
+          WHERE t.client_id = ? OR t.is_global = 1 ORDER BY t.updated_at DESC`
+        params = [req.user.id]
+      } else {
+        query = `SELECT t.*, c.name as client_name, c.company as client_company, u.name as assignee_name,
+          i.amount as invoice_amount, i.status as invoice_status
+          FROM tickets t
+          LEFT JOIN clients c ON t.client_id = c.id
+          LEFT JOIN users u ON t.assignee_id = u.id
+          LEFT JOIN invoices i ON i.ticket_id = t.id
+          WHERE t.client_id = ? ORDER BY t.updated_at DESC`
+        params = [req.user.id]
+      }
     } else {
       query = `SELECT t.*, c.name as client_name, c.email as client_email, c.company as client_company, u.name as assignee_name,
         i.amount as invoice_amount, i.status as invoice_status
