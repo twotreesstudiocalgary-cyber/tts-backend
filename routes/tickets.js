@@ -24,6 +24,7 @@ const getTicketWithDetails = async (id) => {
   `, [id])
 
   const [invoices] = await execute('SELECT * FROM invoices WHERE ticket_id = ? ORDER BY created_at DESC LIMIT 1', [id])
+  const [selectedOptions] = await execute('SELECT * FROM ticket_selected_options WHERE ticket_id = ?', [id]).catch(() => [[], []])
 
   // Enrich comments with author names
   for (const comment of comments) {
@@ -43,7 +44,8 @@ const getTicketWithDetails = async (id) => {
     assignee: ticket.assignee_name,
     comments,
     invoice: invoices[0] || null,
-    attachments: []
+    attachments: [],
+    selected_options: selectedOptions || []
   }
 }
 
@@ -118,9 +120,17 @@ router.post('/', authenticate, async (req, res) => {
 
     const id = uuidv4()
     await execute(
-      'INSERT INTO tickets (id, title, type, priority, description, client_id) VALUES (?, ?, ?, ?, ?, ?)',
-      [id, title, type, priority || 'normal', description || '', clientId]
+      'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, title, type, priority || 'normal', description || '', clientId, req.body.assignee_id || null]
     )
+
+    // Save selected options
+    if (req.body.selected_options && Array.isArray(req.body.selected_options)) {
+      for (const opt of req.body.selected_options) {
+        await execute('INSERT INTO ticket_selected_options (id, ticket_id, option_id, option_label) VALUES (?, ?, ?, ?)',
+          [uuidv4(), id, opt.id, opt.label])
+      }
+    }
 
     const ticket = await getTicketWithDetails(id)
 
