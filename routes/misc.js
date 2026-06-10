@@ -311,3 +311,23 @@ router.post('/recurring-tickets/run-now', authenticate, requireSuperAdmin, async
     res.status(500).json({ message: 'Server error' })
   }
 })
+
+// POST /api/recurring-tickets/:id/run-now
+router.post('/recurring-tickets/:id/run-now', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { v4: uuidv4 } = require('uuid')
+    const [rows] = await execute('SELECT * FROM recurring_tickets WHERE id = ?', [req.params.id])
+    if (!rows.length) return res.status(404).json({ message: 'Not found' })
+    const tmpl = rows[0]
+    const id = uuidv4()
+    await execute(
+      'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id, is_global) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+      [id, tmpl.title, tmpl.type, tmpl.priority, tmpl.description || '', 'global', tmpl.assignee_id || null]
+    )
+    await execute('UPDATE recurring_tickets SET last_run = NOW() WHERE id = ?', [tmpl.id])
+    res.json({ success: true, message: `"${tmpl.title}" created for all support plan clients` })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
