@@ -53,10 +53,13 @@ router.delete('/ticket-types/:id', authenticate, requireSuperAdmin, async (req, 
 router.post('/clients/create', authenticate, requireAdmin, async (req, res) => {
   try {
     const { name, email, company, customer_type } = req.body
-    if (!name || !email) return res.status(400).json({ message: 'Name and email are required' })
+    if (!name) return res.status(400).json({ message: 'Name is required' })
 
-    const [existing] = await execute('SELECT id FROM clients WHERE email = ?', [email])
-    if (existing.length > 0) return res.status(409).json({ message: 'A client with this email already exists' })
+    // Only check email uniqueness if email provided
+    if (email) {
+      const [existing] = await execute('SELECT id FROM clients WHERE email = ?', [email])
+      if (existing.length > 0) return res.status(409).json({ message: 'A client with this email already exists' })
+    }
 
     const bcrypt = require('bcryptjs')
     const { v4: uuidv4 } = require('uuid')
@@ -67,13 +70,16 @@ router.post('/clients/create', authenticate, requireAdmin, async (req, res) => {
 
     await execute(
       'INSERT INTO clients (id, name, email, password, company, customer_type, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [id, name, email, hashed, company || null, validType, 1]
+      [id, name, email || null, hashed, company || null, validType, 1]
     )
 
-    const { emails } = require('../utils/email')
-    await emails.staffInvite({ name, email }, tempPassword).catch(() => {})
+    // Only send email if email provided
+    if (email) {
+      const { emails } = require('../utils/email')
+      await emails.staffInvite({ name, email }, tempPassword).catch(() => {})
+    }
 
-    res.status(201).json({ client: { id, name, email, company: company || null, customer_type: validType, status: 'active', tickets: 0, created_at: new Date() } })
+    res.status(201).json({ client: { id, name, email: email || null, company: company || null, customer_type: validType, status: 'active', tickets: 0, created_at: new Date() } })
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Server error' })
