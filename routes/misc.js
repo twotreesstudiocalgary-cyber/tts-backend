@@ -113,6 +113,15 @@ router.post('/clients/create', authenticate, requireAdmin, async (req, res) => {
   }
 })
 
+// GET /api/clients/:id
+router.get('/clients/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await execute(`SELECT c.*, COUNT(t.id) as tickets FROM clients c LEFT JOIN tickets t ON t.client_id = c.id WHERE c.id = ? GROUP BY c.id`, [req.params.id])
+    if (rows.length === 0) return res.status(404).json({ message: 'Client not found' })
+    res.json({ client: rows[0] })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
 // GET /api/clients
 router.get('/clients', authenticate, requireAdmin, async (req, res) => {
   try {
