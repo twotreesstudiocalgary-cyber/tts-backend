@@ -111,7 +111,7 @@ router.get('/:id', authenticate, async (req, res) => {
   try {
     const ticket = await getTicketWithDetails(req.params.id)
     if (!ticket) return res.status(404).json({ message: 'Ticket not found' })
-    if (req.user.role === 'client' && ticket.client_id !== req.user.id) return res.status(403).json({ message: 'Access denied' })
+    if (req.user.role === 'client' && ticket.client_id !== req.user.id && !ticket.is_global) return res.status(403).json({ message: 'Access denied' })
     res.json({ ticket })
   } catch (err) {
     console.error(err)
@@ -252,7 +252,7 @@ router.post('/:id/comments', authenticate, async (req, res) => {
 
     const ticket = await getTicketWithDetails(req.params.id)
     if (!ticket) return res.status(404).json({ message: 'Ticket not found' })
-    if (req.user.role === 'client' && ticket.client_id !== req.user.id) return res.status(403).json({ message: 'Access denied' })
+    if (req.user.role === 'client' && ticket.client_id !== req.user.id && !ticket.is_global) return res.status(403).json({ message: 'Access denied' })
 
     const authorType = req.user.role === 'client' ? 'client' : 'staff'
     const id = uuidv4()
