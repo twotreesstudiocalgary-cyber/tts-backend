@@ -1,12 +1,12 @@
 const express = require('express')
 const router = express.Router()
 const { v4: uuidv4 } = require('uuid')
-const { pool } = require('../db')
+const { pool, execute } = require('../db')
 const { authenticate, requireAdmin } = require('../middleware/auth')
 const { emails } = require('../utils/email')
 
 const getTicketWithDetails = async (id) => {
-  const [tickets] = await pool.execute(`
+  const [tickets] = await execute(`
     SELECT t.*, 
       c.name as client_name, c.email as client_email, c.company as client_company,
       u.name as assignee_name
@@ -19,20 +19,20 @@ const getTicketWithDetails = async (id) => {
   if (tickets.length === 0) return null
 
   const ticket = tickets[0]
-  const [comments] = await pool.execute(`
+  const [comments] = await execute(`
     SELECT id, author_id, author_type, text, created_at FROM comments WHERE ticket_id = ? ORDER BY created_at ASC
   `, [id])
 
-  const [invoices] = await pool.execute('SELECT * FROM invoices WHERE ticket_id = ? ORDER BY created_at DESC LIMIT 1', [id])
-  const [attachments] = await pool.execute('SELECT id, filename, original_name, size FROM ticket_attachments WHERE ticket_id = ?', [id])
+  const [invoices] = await execute('SELECT * FROM invoices WHERE ticket_id = ? ORDER BY created_at DESC LIMIT 1', [id])
+  const [attachments] = await execute('SELECT id, filename, original_name, size FROM ticket_attachments WHERE ticket_id = ?', [id])
 
   // Enrich comments with author names
   for (const comment of comments) {
     if (comment.author_type === 'client') {
-      const [rows] = await pool.execute('SELECT name FROM clients WHERE id = ?', [comment.author_id])
+      const [rows] = await execute('SELECT name FROM clients WHERE id = ?', [comment.author_id])
       comment.author = rows[0]?.name || 'Client'
     } else {
-      const [rows] = await pool.execute('SELECT name FROM users WHERE id = ?', [comment.author_id])
+      const [rows] = await execute('SELECT name FROM users WHERE id = ?', [comment.author_id])
       comment.author = rows[0]?.name || 'Team'
     }
     comment.role = comment.author_type
@@ -72,7 +72,7 @@ router.get('/', authenticate, async (req, res) => {
         ORDER BY t.updated_at DESC`
     }
 
-    const [rows] = await pool.execute(query, params)
+    const [rows] = await execute(query, params)
     const tickets = rows.map(t => ({
       ...t,
       client: { id: t.client_id, name: t.client_name, email: t.client_email, company: t.client_company },
@@ -112,13 +112,13 @@ router.post('/', authenticate, async (req, res) => {
     // Staff can create tickets for clients
     if (req.user.role !== 'client' && req.body.client_id) {
       clientId = req.body.client_id
-      const [rows] = await pool.execute('SELECT name, email FROM clients WHERE id = ?', [clientId])
+      const [rows] = await execute('SELECT name, email FROM clients WHERE id = ?', [clientId])
       if (rows.length === 0) return res.status(404).json({ message: 'Client not found' })
       clientName = rows[0].name
     }
 
     const id = uuidv4()
-    await pool.execute(
+    await execute(
       'INSERT INTO tickets (id, title, type, priority, description, client_id) VALUES (?, ?, ?, ?, ?, ?)',
       [id, title, type, priority || 'normal', description || '', clientId]
     )
@@ -129,7 +129,7 @@ router.post('/', authenticate, async (req, res) => {
     await emails.ticketCreated(ticket, ticket.client).catch(() => {})
 
     // Notify all admins
-    const [admins] = await pool.execute("SELECT email FROM users WHERE role = 'superadmin' AND status = 'active'")
+    const [admins] = await execute("SELECT email FROM users WHERE role = 'superadmin' AND status = 'active'")
     for (const admin of admins) {
       await emails.newTicketAdmin({ ...ticket, client_name: clientName }, admin.email).catch(() => {})
     }
@@ -148,7 +148,7 @@ router.put('/:id/status', authenticate, requireAdmin, async (req, res) => {
     const validStatuses = ['new', 'inprogress', 'review', 'complete', 'reopened']
     if (!validStatuses.includes(status)) return res.status(400).json({ message: 'Invalid status' })
 
-    await pool.execute('UPDATE tickets SET status = ?, updated_at = NOW() WHERE id = ?', [status, req.params.id])
+    await execute('UPDATE tickets SET status = ?, updated_at = NOW() WHERE id = ?', [status, req.params.id])
     const ticket = await getTicketWithDetails(req.params.id)
     if (!ticket) return res.status(404).json({ message: 'Ticket not found' })
 
@@ -165,7 +165,7 @@ router.put('/:id/status', authenticate, requireAdmin, async (req, res) => {
 router.put('/:id/assign', authenticate, requireAdmin, async (req, res) => {
   try {
     const { assignee_id } = req.body
-    await pool.execute('UPDATE tickets SET assignee_id = ?, updated_at = NOW() WHERE id = ?', [assignee_id || null, req.params.id])
+    await execute('UPDATE tickets SET assignee_id = ?, updated_at = NOW() WHERE id = ?', [assignee_id || null, req.params.id])
     const ticket = await getTicketWithDetails(req.params.id)
     res.json({ ticket })
   } catch (err) {
@@ -176,7 +176,7 @@ router.put('/:id/assign', authenticate, requireAdmin, async (req, res) => {
 // PUT /api/tickets/:id/note
 router.put('/:id/note', authenticate, requireAdmin, async (req, res) => {
   try {
-    await pool.execute('UPDATE tickets SET internal_note = ? WHERE id = ?', [req.body.note || '', req.params.id])
+    await execute('UPDATE tickets SET internal_note = ? WHERE id = ?', [req.body.note || '', req.params.id])
     res.json({ message: 'Note saved' })
   } catch (err) {
     res.status(500).json({ message: 'Server error' })
@@ -186,7 +186,7 @@ router.put('/:id/note', authenticate, requireAdmin, async (req, res) => {
 // POST /api/tickets/:id/reopen
 router.post('/:id/reopen', authenticate, async (req, res) => {
   try {
-    await pool.execute("UPDATE tickets SET status = 'reopened', updated_at = NOW() WHERE id = ?", [req.params.id])
+    await execute("UPDATE tickets SET status = 'reopened', updated_at = NOW() WHERE id = ?", [req.params.id])
     const ticket = await getTicketWithDetails(req.params.id)
     res.json({ ticket })
   } catch (err) {
@@ -206,12 +206,12 @@ router.post('/:id/comments', authenticate, async (req, res) => {
 
     const authorType = req.user.role === 'client' ? 'client' : 'staff'
     const id = uuidv4()
-    await pool.execute(
+    await execute(
       'INSERT INTO comments (id, ticket_id, author_id, author_type, text) VALUES (?, ?, ?, ?, ?)',
       [id, req.params.id, req.user.id, authorType, text]
     )
 
-    await pool.execute('UPDATE tickets SET updated_at = NOW() WHERE id = ?', [req.params.id])
+    await execute('UPDATE tickets SET updated_at = NOW() WHERE id = ?', [req.params.id])
 
     // If staff replied, notify client. If client replied, notify assigned staff.
     if (authorType === 'staff') {
@@ -232,11 +232,11 @@ router.post('/:id/invoice', authenticate, requireAdmin, async (req, res) => {
     const { amount } = req.body
     if (!amount || isNaN(parseFloat(amount))) return res.status(400).json({ message: 'Valid amount required' })
 
-    const [existing] = await pool.execute("SELECT id FROM invoices WHERE ticket_id = ? AND status = 'unpaid'", [req.params.id])
+    const [existing] = await execute("SELECT id FROM invoices WHERE ticket_id = ? AND status = 'unpaid'", [req.params.id])
     if (existing.length > 0) return res.status(409).json({ message: 'An unpaid invoice already exists for this ticket' })
 
     const id = uuidv4()
-    await pool.execute('INSERT INTO invoices (id, ticket_id, amount) VALUES (?, ?, ?)', [id, req.params.id, parseFloat(amount)])
+    await execute('INSERT INTO invoices (id, ticket_id, amount) VALUES (?, ?, ?)', [id, req.params.id, parseFloat(amount)])
 
     const ticket = await getTicketWithDetails(req.params.id)
     const invoice = { id, amount: parseFloat(amount), status: 'unpaid' }
