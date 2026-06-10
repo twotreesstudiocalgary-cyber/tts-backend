@@ -96,6 +96,24 @@ router.get('/clients', authenticate, requireAdmin, async (req, res) => {
   }
 })
 
+// PUT /api/clients/:id
+router.put('/clients/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, email, customer_type } = req.body
+    await execute('UPDATE clients SET name = ?, email = ?, customer_type = ? WHERE id = ?', [name, email || null, customer_type, req.params.id])
+    res.json({ client: { id: req.params.id, name, email, customer_type } })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// DELETE /api/clients/:id
+router.delete('/clients/:id', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    await execute('DELETE FROM tickets WHERE client_id = ?', [req.params.id])
+    await execute('DELETE FROM clients WHERE id = ?', [req.params.id])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
 // PUT /api/clients/:id/toggle-status
 router.put('/clients/:id/toggle-status', authenticate, requireSuperAdmin, async (req, res) => {
   try {
