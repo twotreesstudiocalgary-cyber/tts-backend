@@ -57,3 +57,41 @@ const start = async () => {
 }
 
 start()
+
+// ─── Recurring Tickets Cron ───────────────────────────────────────────────────
+const checkRecurringTickets = async () => {
+  const now = new Date()
+  if (now.getDate() !== 1) return // Only run on 1st of month
+  console.log('🔄 Running recurring tickets job...')
+  try {
+    const { pool, execute } = require('./db')
+    const { v4: uuidv4 } = require('uuid')
+    const [templates] = await execute('SELECT * FROM recurring_tickets WHERE active = 1')
+    for (const tmpl of templates) {
+      // Get eligible clients based on scope
+      const [clients] = await execute(
+        "SELECT id, name, email FROM clients WHERE status = 'active' AND customer_type = 'support_plan'"
+      )
+      for (const client of clients) {
+        // Check if ticket already created this month
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+        const [existing] = await execute(
+          "SELECT id FROM tickets WHERE client_id = ? AND title = ? AND created_at >= ?",
+          [client.id, tmpl.title, startOfMonth]
+        )
+        if (existing.length > 0) continue // Already created
+        const id = uuidv4()
+        await execute(
+          'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [id, tmpl.title, tmpl.type, tmpl.priority, tmpl.description || '', client.id, tmpl.assignee_id || null]
+        )
+        console.log(`✅ Recurring ticket created for ${client.name}: ${tmpl.title}`)
+      }
+    }
+  } catch (err) { console.error('Recurring ticket error:', err) }
+}
+
+// Check every hour
+setInterval(checkRecurringTickets, 60 * 60 * 1000)
+// Also check on startup
+setTimeout(checkRecurringTickets, 5000)
