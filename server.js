@@ -11,12 +11,9 @@ const app = express()
 app.use(helmet())
 app.use(morgan('dev'))
 app.use(cors({
-  origin: [
-    process.env.CLIENT_URL,
-    process.env.ADMIN_URL,
-    'http://localhost:3000',
-    'http://localhost:3001',
-  ],
+  origin: function(origin, callback) {
+    callback(null, true)
+  },
   credentials: true
 }))
 app.use(express.json({ limit: '10mb' }))
