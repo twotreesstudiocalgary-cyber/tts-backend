@@ -278,3 +278,27 @@ router.delete('/recurring-tickets/:id', authenticate, requireSuperAdmin, async (
     res.json({ success: true })
   } catch (err) { res.status(500).json({ message: 'Server error' }) }
 })
+
+// POST /api/recurring-tickets/run-now
+router.post('/recurring-tickets/run-now', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { v4: uuidv4 } = require('uuid')
+    const [templates] = await execute('SELECT * FROM recurring_tickets WHERE active = 1')
+    let created = 0
+    for (const tmpl of templates) {
+      const [clients] = await execute("SELECT id, name FROM clients WHERE status = 'active' AND customer_type = 'support_plan'")
+      for (const client of clients) {
+        const id = uuidv4()
+        await execute(
+          'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [id, tmpl.title, tmpl.type, tmpl.priority, tmpl.description || '', client.id, tmpl.assignee_id || null]
+        )
+        created++
+      }
+    }
+    res.json({ success: true, created, message: `Created ${created} ticket(s)` })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
