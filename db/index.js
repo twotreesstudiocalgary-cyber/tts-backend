@@ -63,3 +63,5 @@ const initDB = async () => {
     throw err
   }
 }
+
+module.exports = { pool, initDB, execute }
