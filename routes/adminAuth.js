@@ -102,6 +102,47 @@ router.post('/team/invite', authenticate, requireSuperAdmin, async (req, res) =>
   }
 })
 
+// GET /api/admin/auth/team/:id
+router.get('/team/:id', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const [rows] = await execute('SELECT id, name, email, role, status, created_at FROM users WHERE id = ?', [req.params.id])
+    if (rows.length === 0) return res.status(404).json({ message: 'User not found' })
+    res.json({ member: rows[0] })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// PUT /api/admin/auth/team/:id
+router.put('/team/:id', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { name, email, role } = req.body
+    await execute('UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?', [name, email, role, req.params.id])
+    const [rows] = await execute('SELECT id, name, email, role, status FROM users WHERE id = ?', [req.params.id])
+    res.json({ member: rows[0] })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// PUT /api/admin/auth/team/:id/reset-password
+router.put('/team/:id/reset-password', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { password } = req.body
+    if (!password || password.length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters' })
+    const hashed = await bcrypt.hash(password, 12)
+    await execute('UPDATE users SET password = ? WHERE id = ?', [hashed, req.params.id])
+    res.json({ message: 'Password reset successfully' })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// DELETE /api/admin/auth/team/:id
+router.delete('/team/:id', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const [rows] = await execute('SELECT role FROM users WHERE id = ?', [req.params.id])
+    if (rows.length === 0) return res.status(404).json({ message: 'User not found' })
+    if (rows[0].role === 'superadmin') return res.status(403).json({ message: 'Cannot delete super admin' })
+    await execute('DELETE FROM users WHERE id = ?', [req.params.id])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
 // PUT /api/admin/team/:id/toggle-status
 router.put('/team/:id/toggle-status', authenticate, requireSuperAdmin, async (req, res) => {
   try {
