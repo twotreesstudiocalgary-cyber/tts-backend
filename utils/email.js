@@ -34,111 +34,187 @@ const sendBrevoEmail = async ({ to, subject, html }) => {
   })
 }
 
-const emailTemplate = (content) => `<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Two Trees Studio</title>
-</head>
-<body style="margin:0;padding:0;background-color:#f0f4f8;font-family:Arial,Helvetica,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f4f8;padding:30px 10px">
-  <tr><td align="center">
-    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08)">
-      <!-- Header -->
-      <tr>
-        <td style="background:linear-gradient(135deg,#0F2340 0%,#1A6BAB 100%);padding:32px 36px;text-align:center">
-          <div style="width:56px;height:56px;background:rgba(255,255,255,0.15);border-radius:12px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;font-size:28px;line-height:56px">🌳</div>
-          <div style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.3px">Two Trees Studio</div>
-          <div style="color:rgba(255,255,255,0.65);font-size:13px;margin-top:4px">Web Design &amp; Development · Calgary, AB</div>
-        </td>
-      </tr>
-      <!-- Body -->
-      <tr>
-        <td style="padding:32px 36px;color:#1A202C;font-size:15px;line-height:1.7">
-          ${content}
-        </td>
-      </tr>
-      <!-- Footer -->
-      <tr>
-        <td style="background:#f7f9fc;padding:16px 36px;border-top:1px solid #E2E8F0;text-align:center">
-          <p style="margin:0;font-size:12px;color:#718096">
-            Two Trees Studio · Calgary, AB · 
-            <a href="https://portal.websitesupportcalgary.ca" style="color:#1A6BAB;text-decoration:none">Client Portal</a>
-          </p>
-        </td>
-      </tr>
-    </table>
+const LOGO = 'https://portal.websitesupportcalgary.ca/logo.jpg'
+const PORTAL = 'https://portal.websitesupportcalgary.ca'
+const ADMIN = 'https://portal.websitesupportcalgary.ca/admin'
+
+const emailTemplate = ({ title, greeting, body, footer_tagline, footer_sub }) => `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>
+<body style="margin:0;padding:0;background:#0d1b35;font-family:Arial,Helvetica,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0d1b35;padding:30px 16px">
+<tr><td align="center">
+<table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%">
+
+  <!-- HEADER -->
+  <tr><td style="background:linear-gradient(180deg,#0d1b35 0%,#1a3a6b 50%,#0d1b35 100%);padding:40px 20px 32px;text-align:center;border-radius:16px 16px 0 0">
+    <img src="${LOGO}" alt="Two Trees Studio" width="90" height="90" style="border-radius:12px;display:block;margin:0 auto 18px;border:3px solid rgba(255,255,255,0.15)" />
+    <div style="color:#ffffff;font-size:30px;font-weight:700;letter-spacing:-0.5px;font-family:Georgia,serif">Two Trees Studio</div>
+    <div style="color:rgba(255,255,255,0.6);font-size:12px;letter-spacing:3px;margin-top:6px;text-transform:uppercase">Web Design &amp; Development</div>
   </td></tr>
+
+  <!-- BODY -->
+  <tr><td style="background:#ffffff;padding:36px 40px">
+    ${greeting ? `<p style="margin:0 0 6px;font-size:24px;font-weight:700;color:#1a202c">Hi <span style="color:#1A6BAB">${greeting},</span></p><div style="width:40px;height:3px;background:#1A6BAB;margin-bottom:20px"></div>` : ''}
+    ${body}
+  </td></tr>
+
+  <!-- FOOTER TAGLINE -->
+  <tr><td style="background:#1a3a6b;padding:24px 40px;text-align:center">
+    <img src="${LOGO}" alt="" width="44" height="44" style="border-radius:50%;border:2px solid rgba(255,255,255,0.2);margin-bottom:12px;display:block;margin-left:auto;margin-right:auto" />
+    <div style="color:#ffffff;font-size:16px;font-weight:700;margin-bottom:4px">${footer_tagline || "Let's build something great together."}</div>
+    <div style="color:rgba(255,255,255,0.6);font-size:13px">${footer_sub || 'Thank you for being part of Two Trees Studio.'}</div>
+  </td></tr>
+
+  <!-- BOTTOM BAR -->
+  <tr><td style="background:#0d1b35;padding:16px 40px;border-radius:0 0 16px 16px">
+    <table width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td style="text-align:center;color:rgba(255,255,255,0.5);font-size:12px">
+        &#127760; Two Trees Studio &nbsp;|&nbsp; &#128205; Calgary, AB &nbsp;|&nbsp; 
+        <a href="${PORTAL}" style="color:rgba(255,255,255,0.6);text-decoration:none">&#8599; Client Portal</a>
+      </td>
+    </tr></table>
+  </td></tr>
+
 </table>
+</td></tr></table>
 </body></html>`
 
-const btn = (url, label) => `<table cellpadding="0" cellspacing="0" style="margin:20px 0"><tr><td style="background:#1A6BAB;border-radius:8px;padding:0"><a href="${url}" style="display:inline-block;padding:13px 28px;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:8px">${label}</a></td></tr></table>`
+const credRow = (icon, label, value) => `
+<tr>
+  <td style="padding:14px 16px;border-bottom:1px solid #e2e8f0;vertical-align:middle">
+    <table cellpadding="0" cellspacing="0"><tr>
+      <td style="width:44px;vertical-align:middle">
+        <div style="width:36px;height:36px;background:#1A6BAB;border-radius:50%;text-align:center;line-height:36px;font-size:16px">${icon}</div>
+      </td>
+      <td style="padding-left:12px;vertical-align:middle;color:#4a5568;font-size:14px;font-weight:500;width:80px">${label}</td>
+      <td style="padding-left:12px;vertical-align:middle;color:#1A6BAB;font-size:14px;font-weight:600">${value}</td>
+    </tr></table>
+  </td>
+</tr>`
 
-const infoTable = (rows) => `<table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden">
-${rows.map(([label, value], i) => `<tr style="background:${i % 2 === 0 ? '#f7f9fc' : '#ffffff'}"><td style="padding:10px 14px;font-size:13px;color:#4A5568;width:110px;font-weight:500">${label}</td><td style="padding:10px 14px;font-size:13px;color:#1A202C">${value}</td></tr>`).join('')}
+const credTable = (rows) => `
+<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin:20px 0">
+  ${rows}
 </table>`
 
-const sendEmail = ({ to, subject, html }) => sendBrevoEmail({ to, subject, html: emailTemplate(html) })
+const warningBox = (text) => `
+<table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0">
+  <tr><td style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px 16px">
+    <table cellpadding="0" cellspacing="0"><tr>
+      <td style="width:32px;vertical-align:top;font-size:20px">&#9888;</td>
+      <td style="padding-left:10px;color:#1d4ed8;font-size:13px;line-height:1.6">${text}</td>
+    </tr></table>
+  </td></tr>
+</table>`
+
+const actionBtn = (url, label, icon = '&#10148;') => `
+<table cellpadding="0" cellspacing="0" style="margin:24px auto">
+  <tr><td style="background:#1A6BAB;border-radius:10px">
+    <a href="${url}" style="display:inline-block;padding:14px 36px;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px">
+      ${icon} &nbsp;${label}
+    </a>
+  </td></tr>
+</table>`
+
+const sendEmail = ({ to, subject, html, greeting, footer_tagline, footer_sub }) =>
+  sendBrevoEmail({ to, subject, html: emailTemplate({ title: subject, greeting, body: html, footer_tagline, footer_sub }) })
 
 const emails = {
   verifyEmail: (client, token) => sendEmail({
     to: client.email,
-    subject: '✉️ Verify your email — Two Trees Studio',
-    html: `<p style="margin:0 0 16px">Hi <strong>${client.name}</strong>,</p>
-<p style="margin:0 0 16px">Thanks for registering with Two Trees Studio! Please verify your email address to activate your account.</p>
-${btn(`https://portal.websitesupportcalgary.ca/#/verify-email?token=${token}`, 'Verify My Email')}
-<p style="margin:16px 0 0;font-size:13px;color:#718096">This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.</p>`
+    subject: 'Verify your email — Two Trees Studio',
+    greeting: client.name.split(' ')[0],
+    footer_tagline: "Welcome to Two Trees Studio!",
+    footer_sub: "We're excited to have you on board.",
+    html: `
+      <p style="margin:0 0 20px;color:#4a5568;font-size:15px;line-height:1.7">Thanks for registering with <strong>Two Trees Studio</strong>! Please verify your email address to activate your account and get started.</p>
+      ${actionBtn(`${PORTAL}/#/verify-email?token=${token}`, 'Verify My Email', '&#10003;')}
+      <p style="color:#718096;font-size:12px;text-align:center;margin-top:8px">This link expires in 24 hours. If you didn't create an account, ignore this email.</p>`
   }),
 
   resetPassword: (email, token, isClient = true) => sendEmail({
     to: email,
-    subject: '🔐 Reset your password — Two Trees Studio',
-    html: `<p style="margin:0 0 16px">You requested a password reset for your Two Trees Studio account.</p>
-${btn(`https://portal.websitesupportcalgary.ca/#/reset-password?token=${token}`, 'Reset Password')}
-<p style="margin:16px 0 0;font-size:13px;color:#718096">This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>`
+    subject: 'Reset your password — Two Trees Studio',
+    greeting: null,
+    footer_tagline: "Account Security",
+    footer_sub: "Keep your account safe.",
+    html: `
+      <p style="margin:0 0 20px;color:#4a5568;font-size:15px;line-height:1.7">We received a request to reset your <strong>Two Trees Studio</strong> account password. Click the button below to set a new password.</p>
+      ${actionBtn(`${PORTAL}/#/reset-password?token=${token}`, 'Reset Password', '&#128274;')}
+      ${warningBox('This link expires in 1 hour. If you did not request a password reset, please ignore this email — your account is safe.')}` 
   }),
 
   ticketCreated: (ticket, client) => sendEmail({
     to: client.email,
-    subject: `🎫 We received your request: ${ticket.title}`,
-    html: `<p style="margin:0 0 16px">Hi <strong>${client.name}</strong>,</p>
-<p style="margin:0 0 16px">We've received your service request and our team will review it shortly.</p>
-${infoTable([['Request', `<strong>${ticket.title}</strong>`], ['Type', ticket.type], ['Priority', ticket.priority]])}
-${btn(`https://portal.websitesupportcalgary.ca/#/tickets/${ticket.id}`, 'View Ticket')}`
+    subject: `Ticket received: ${ticket.title}`,
+    greeting: client.name.split(' ')[0],
+    footer_tagline: "We're on it!",
+    footer_sub: "Our team will review your request shortly.",
+    html: `
+      <p style="margin:0 0 20px;color:#4a5568;font-size:15px;line-height:1.7">We've received your service request and our team will review it shortly. You'll be notified of any updates.</p>
+      ${credTable(
+        credRow('&#127903;', 'Request', `<span style="color:#1a202c">${ticket.title}</span>`) +
+        credRow('&#127991;', 'Type', `<span style="color:#1a202c">${ticket.type}</span>`) +
+        credRow('&#9650;', 'Priority', `<span style="color:${ticket.priority === 'urgent' ? '#e53e3e' : ticket.priority === 'normal' ? '#1A6BAB' : '#38a169'}">${ticket.priority}</span>`)
+      )}
+      ${actionBtn(`${PORTAL}/#/tickets/${ticket.id}`, 'View Ticket', '&#128065;')}`
   }),
 
   ticketStatusUpdate: (ticket, client, status) => sendEmail({
     to: client.email,
-    subject: `📋 Update on your request: ${ticket.title}`,
-    html: `<p style="margin:0 0 16px">Hi <strong>${client.name}</strong>,</p>
-<p style="margin:0 0 16px">Your ticket status has been updated to <strong style="color:#1A6BAB">${status === 'inprogress' ? 'In Progress' : status === 'complete' ? 'Complete ✅' : status}</strong>.</p>
-${status === 'complete' ? '<p style="margin:0 0 16px;padding:12px 16px;background:#f0fff4;border-left:4px solid #38A169;border-radius:0 8px 8px 0;color:#276749">Your request has been completed! If you have any questions, you can reopen the ticket from your portal.</p>' : ''}
-${btn(`https://portal.websitesupportcalgary.ca/#/tickets/${ticket.id}`, 'View Ticket')}`
+    subject: `Update on: ${ticket.title}`,
+    greeting: client.name.split(' ')[0],
+    footer_tagline: status === 'complete' ? "All done!" : "We're working on it!",
+    footer_sub: status === 'complete' ? "Thank you for choosing Two Trees Studio." : "Your request is being handled with care.",
+    html: `
+      <p style="margin:0 0 20px;color:#4a5568;font-size:15px;line-height:1.7">Your ticket status has been updated to <strong style="color:#1A6BAB">${status === 'inprogress' ? 'In Progress' : status === 'complete' ? 'Complete' : status}</strong>.</p>
+      ${status === 'complete' ? `<div style="background:#f0fff4;border:1px solid #9ae6b4;border-radius:10px;padding:16px;margin:16px 0;color:#276749;font-size:14px">&#10003; &nbsp;Your request has been completed! If you need any changes, you can reopen the ticket from your portal.</div>` : ''}
+      ${actionBtn(`${PORTAL}/#/tickets/${ticket.id}`, 'View Ticket', '&#128065;')}`
   }),
 
   newComment: (ticket, client, commentText) => sendEmail({
     to: client.email,
-    subject: `💬 New message on: ${ticket.title}`,
-    html: `<p style="margin:0 0 16px">Hi <strong>${client.name}</strong>,</p>
-<p style="margin:0 0 16px">Our team has sent you a message on your ticket:</p>
-<blockquote style="margin:16px 0;padding:14px 18px;background:#f0f7ff;border-left:4px solid #1A6BAB;border-radius:0 8px 8px 0;font-size:14px;color:#1A202C">${commentText}</blockquote>
-${btn(`https://portal.websitesupportcalgary.ca/#/tickets/${ticket.id}`, 'Reply')}`
+    subject: `New message: ${ticket.title}`,
+    greeting: client.name.split(' ')[0],
+    footer_tagline: "We're here to help.",
+    footer_sub: "Reply anytime through your client portal.",
+    html: `
+      <p style="margin:0 0 20px;color:#4a5568;font-size:15px;line-height:1.7">Our team has sent you a message on your ticket <strong>${ticket.title}</strong>:</p>
+      <div style="background:#f0f7ff;border-left:4px solid #1A6BAB;border-radius:0 10px 10px 0;padding:16px 20px;margin:16px 0;font-size:14px;color:#1a202c;line-height:1.7">${commentText}</div>
+      ${actionBtn(`${PORTAL}/#/tickets/${ticket.id}`, 'Reply', '&#128172;')}`
   }),
 
   newTicketAdmin: (ticket, adminEmail) => sendEmail({
     to: adminEmail,
-    subject: `🎫 New ticket: ${ticket.title}`,
-    html: `<p style="margin:0 0 16px">A new service ticket has been submitted.</p>
-${infoTable([['Client', `<strong>${ticket.client_name}</strong>`], ['Title', ticket.title], ['Type', ticket.type], ['Priority', `<strong style="color:${ticket.priority === 'urgent' ? '#E53E3E' : ticket.priority === 'normal' ? '#3182CE' : '#38A169'}">${ticket.priority}</strong>`]])}
-${btn(`https://portal.websitesupportcalgary.ca/admin/#/tickets/${ticket.id}`, 'View in Dashboard')}`
+    subject: `New ticket: ${ticket.title}`,
+    greeting: null,
+    footer_tagline: "New service request received.",
+    footer_sub: "Assign and respond promptly.",
+    html: `
+      <p style="margin:0 0 20px;color:#4a5568;font-size:15px;line-height:1.7">A new service ticket has been submitted and is waiting for assignment.</p>
+      ${credTable(
+        credRow('&#128100;', 'Client', `<span style="color:#1a202c;font-weight:700">${ticket.client_name}</span>`) +
+        credRow('&#127903;', 'Title', `<span style="color:#1a202c">${ticket.title}</span>`) +
+        credRow('&#127991;', 'Type', `<span style="color:#1a202c">${ticket.type}</span>`) +
+        credRow('&#9650;', 'Priority', `<span style="color:${ticket.priority === 'urgent' ? '#e53e3e' : ticket.priority === 'normal' ? '#1A6BAB' : '#38a169'};font-weight:700;text-transform:uppercase">${ticket.priority}</span>`)
+      )}
+      ${actionBtn(`${ADMIN}/#/tickets/${ticket.id}`, 'View in Dashboard', '&#9881;')}`
   }),
 
   staffInvite: (member, tempPassword) => sendEmail({
     to: member.email,
-    subject: '👋 You have been invited to Two Trees Studio Dashboard',
-    html: `<p style="margin:0 0 16px">Hi <strong>${member.name}</strong>,</p>
-<p style="margin:0 0 16px">You have been added as a team member on the Two Trees Studio admin dashboard. Use the credentials below to sign in.</p>
-${infoTable([['Email', member.email], ['Password', `<strong style="font-size:16px;letter-spacing:1px">${tempPassword}</strong>`]])}
-<p style="margin:16px 0;padding:12px 16px;background:#fff5f5;border-left:4px solid #E53E3E;border-radius:0 8px 8px 0;color:#C53030;font-size:13px">⚠️ Please change your password immediately after your first login.</p>
-${btn('https://portal.websitesupportcalgary.ca/admin/#/login', 'Go to Dashboard')}`
+    subject: 'You have been invited to Two Trees Studio Dashboard',
+    greeting: member.name.split(' ')[0],
+    footer_tagline: "Let's build something great together.",
+    footer_sub: "Thank you for being part of Two Trees Studio.",
+    html: `
+      <p style="margin:0 0 20px;color:#4a5568;font-size:15px;line-height:1.7">You have been added as a team member on the <strong>Two Trees Studio</strong> admin dashboard. Use the credentials below to sign in and get started.</p>
+      ${credTable(
+        credRow('&#9993;', 'Email', member.email) +
+        credRow('&#128274;', 'Password', `<strong style="font-size:16px;letter-spacing:1px;color:#1a202c">${tempPassword}</strong>`)
+      )}
+      ${warningBox('Please change your password immediately after your first login.')}
+      ${actionBtn(`${ADMIN}/#/login`, 'Go to Dashboard', '&#127807;')}`
   })
 }
 
