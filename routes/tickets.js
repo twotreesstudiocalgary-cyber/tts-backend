@@ -182,6 +182,20 @@ router.put('/:id/note', authenticate, requireAdmin, async (req, res) => {
   }
 })
 
+// DELETE /api/tickets/:id
+router.delete('/:id', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'superadmin') return res.status(403).json({ message: 'Super admin only' })
+    await execute('DELETE FROM comments WHERE ticket_id = ?', [req.params.id])
+    await execute('DELETE FROM invoices WHERE ticket_id = ?', [req.params.id])
+    await execute('DELETE FROM tickets WHERE id = ?', [req.params.id])
+    res.json({ success: true })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
 // POST /api/tickets/:id/reopen
 router.post('/:id/reopen', authenticate, async (req, res) => {
   try {
