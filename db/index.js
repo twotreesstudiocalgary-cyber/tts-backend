@@ -28,7 +28,12 @@ const initDB = async () => {
     await pool.query(`CREATE TABLE IF NOT EXISTS ticket_types (id VARCHAR(36) PRIMARY KEY, name VARCHAR(100) UNIQUE NOT NULL, active SMALLINT DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
     await pool.query(`CREATE TABLE IF NOT EXISTS ticket_type_options (id VARCHAR(36) PRIMARY KEY, ticket_type_id VARCHAR(36) NOT NULL, label VARCHAR(150) NOT NULL, sort_order INT DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
     await pool.query(`CREATE TABLE IF NOT EXISTS ticket_selected_options (id VARCHAR(36) PRIMARY KEY, ticket_id VARCHAR(36) NOT NULL, option_id VARCHAR(36) NOT NULL, option_label VARCHAR(150) NOT NULL)`)
-    await pool.query(`CREATE TABLE IF NOT EXISTS tickets (id VARCHAR(36) PRIMARY KEY, title VARCHAR(255) NOT NULL, type VARCHAR(100) NOT NULL, status VARCHAR(20) DEFAULT 'new', priority VARCHAR(20) DEFAULT 'normal', description TEXT, internal_note TEXT, client_id VARCHAR(36) NOT NULL, assignee_id VARCHAR(36), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
+    await pool.query(`CREATE TABLE IF NOT EXISTS tickets (id VARCHAR(36) PRIMARY KEY, ticket_number SERIAL, title VARCHAR(255) NOT NULL, type VARCHAR(100) NOT NULL, status VARCHAR(20) DEFAULT 'new', priority VARCHAR(20) DEFAULT 'normal', description TEXT, internal_note TEXT, client_id VARCHAR(36) NOT NULL, assignee_id VARCHAR(36), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
+    // Add ticket_number column to existing installs
+    await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_number SERIAL`).catch(() => {})
+    // Start ticket numbers at 100
+    await pool.query(`CREATE SEQUENCE IF NOT EXISTS ticket_number_seq START 100`).catch(() => {})
+    await pool.query(`ALTER TABLE tickets ALTER COLUMN ticket_number SET DEFAULT nextval('ticket_number_seq')`).catch(() => {})
     await pool.query(`CREATE TABLE IF NOT EXISTS comments (id VARCHAR(36) PRIMARY KEY, ticket_id VARCHAR(36) NOT NULL, author_id VARCHAR(36) NOT NULL, author_type VARCHAR(20) NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
     await pool.query(`CREATE TABLE IF NOT EXISTS invoices (id VARCHAR(36) PRIMARY KEY, ticket_id VARCHAR(36) NOT NULL, amount DECIMAL(10,2) NOT NULL, status VARCHAR(20) DEFAULT 'unpaid', paid_at TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
     await pool.query(`CREATE TABLE IF NOT EXISTS password_resets (id VARCHAR(36) PRIMARY KEY, email VARCHAR(150) NOT NULL, token VARCHAR(255) NOT NULL, expires_at TIMESTAMP NOT NULL, used SMALLINT DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
