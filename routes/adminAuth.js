@@ -117,6 +117,17 @@ router.put('/team/:id/toggle-status', authenticate, requireSuperAdmin, async (re
   }
 })
 
+// PUT /api/admin/auth/profile
+router.put('/profile', authenticate, async (req, res) => {
+  try {
+    const { name, email } = req.body
+    await execute('UPDATE users SET name = ?, email = ? WHERE id = ?', [name, email, req.user.id])
+    res.json({ user: { id: req.user.id, name, email, role: req.user.role } })
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
 // PUT /api/admin/auth/change-password
 router.put('/change-password', authenticate, async (req, res) => {
   try {
