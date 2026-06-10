@@ -248,15 +248,17 @@ router.get('/recurring-tickets', authenticate, requireSuperAdmin, async (req, re
 // POST /api/recurring-tickets
 router.post('/recurring-tickets', authenticate, requireSuperAdmin, async (req, res) => {
   try {
-    const { title, type, priority, description, assignee_id, scope } = req.body
+    const { title, type, priority, description, assignee_id, scope, client_id } = req.body
     if (!title || !type) return res.status(400).json({ message: 'Title and type are required' })
     const { v4: uuidv4 } = require('uuid')
     const id = uuidv4()
+    const finalScope = scope || 'global'
+    const finalClientId = finalScope === 'specific' ? (client_id || null) : null
     await execute(
-      'INSERT INTO recurring_tickets (id, title, type, priority, description, assignee_id, scope, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, title, type, priority || 'normal', description || '', assignee_id || null, scope || 'support_plan', req.user.id]
+      'INSERT INTO recurring_tickets (id, title, type, priority, description, assignee_id, scope, client_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, title, type, priority || 'normal', description || '', assignee_id || null, finalScope, finalClientId, req.user.id]
     )
-    res.status(201).json({ ticket: { id, title, type, priority: priority || 'normal', description, assignee_id, scope: scope || 'support_plan', active: 1 } })
+    res.status(201).json({ ticket: { id, title, type, priority: priority || 'normal', description, assignee_id, scope: finalScope, client_id: finalClientId, active: 1 } })
   } catch (err) { res.status(500).json({ message: 'Server error' }) }
 })
 
@@ -320,12 +322,22 @@ router.post('/recurring-tickets/:id/run-now', authenticate, requireSuperAdmin, a
     if (!rows.length) return res.status(404).json({ message: 'Not found' })
     const tmpl = rows[0]
     const id = uuidv4()
-    await execute(
-      'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id, is_global) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
-      [id, tmpl.title, tmpl.type, tmpl.priority, tmpl.description || '', 'global', tmpl.assignee_id || null]
-    )
+    if (tmpl.scope === 'specific' && tmpl.client_id) {
+      // Create ticket for specific client
+      await execute(
+        'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id, is_global) VALUES (?, ?, ?, ?, ?, ?, ?, 0)',
+        [id, tmpl.title, tmpl.type, tmpl.priority, tmpl.description || '', tmpl.client_id, tmpl.assignee_id || null]
+      )
+      res.json({ success: true, message: `"${tmpl.title}" created for specific client` })
+    } else {
+      // Create global ticket for all support plan clients
+      await execute(
+        'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id, is_global) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+        [id, tmpl.title, tmpl.type, tmpl.priority, tmpl.description || '', 'global', tmpl.assignee_id || null]
+      )
+      res.json({ success: true, message: `"${tmpl.title}" created for all support plan clients` })
+    }
     await execute('UPDATE recurring_tickets SET last_run = NOW() WHERE id = ?', [tmpl.id])
-    res.json({ success: true, message: `"${tmpl.title}" created for all support plan clients` })
   } catch (err) {
     console.error(err)
     res.status(500).json({ message: 'Server error' })
