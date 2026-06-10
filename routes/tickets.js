@@ -24,7 +24,6 @@ const getTicketWithDetails = async (id) => {
   `, [id])
 
   const [invoices] = await execute('SELECT * FROM invoices WHERE ticket_id = ? ORDER BY created_at DESC LIMIT 1', [id])
-  const [attachments] = await execute('SELECT id, filename, original_name, size FROM ticket_attachments WHERE ticket_id = ?', [id])
 
   // Enrich comments with author names
   for (const comment of comments) {
@@ -44,7 +43,7 @@ const getTicketWithDetails = async (id) => {
     assignee: ticket.assignee_name,
     comments,
     invoice: invoices[0] || null,
-    attachments
+    attachments: []
   }
 }
 
