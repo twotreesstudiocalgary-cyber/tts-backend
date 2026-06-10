@@ -1,7 +1,7 @@
-const SibApiV3Sdk = require('@getbrevo/brevo')
-
-const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi()
-apiInstance.setApiKey(SibApiV3Sdk.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY)
+const Brevo = require('@getbrevo/brevo')
+const apiInstance = new Brevo.TransactionalEmailsApi()
+const apiKey = apiInstance.authentications['apiKey']
+apiKey.apiKey = process.env.BREVO_API_KEY
 
 const FROM = { email: 'info@twotreesstudio.ca', name: 'Two Trees Studio' }
 
@@ -30,7 +30,7 @@ const emailTemplate = (content) => `
 
 const sendEmail = async ({ to, subject, html }) => {
   try {
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail()
+    const sendSmtpEmail = new Brevo.SendSmtpEmail()
     sendSmtpEmail.sender = FROM
     sendSmtpEmail.to = [{ email: to }]
     sendSmtpEmail.subject = subject
