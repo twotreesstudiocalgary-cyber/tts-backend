@@ -37,6 +37,33 @@ router.post('/ticket-types', authenticate, requireSuperAdmin, async (req, res) =
   }
 })
 
+// GET /api/ticket-types/:id/options
+router.get('/ticket-types/:id/options', async (req, res) => {
+  try {
+    const [options] = await execute('SELECT * FROM ticket_type_options WHERE ticket_type_id = ? ORDER BY sort_order ASC, created_at ASC', [req.params.id])
+    res.json({ options })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// POST /api/ticket-types/:id/options
+router.post('/ticket-types/:id/options', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { label } = req.body
+    if (!label?.trim()) return res.status(400).json({ message: 'Label is required' })
+    const id = uuidv4()
+    await execute('INSERT INTO ticket_type_options (id, ticket_type_id, label) VALUES (?, ?, ?)', [id, req.params.id, label.trim()])
+    res.status(201).json({ option: { id, ticket_type_id: req.params.id, label: label.trim() } })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// DELETE /api/ticket-types/options/:optionId
+router.delete('/ticket-types/options/:optionId', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    await execute('DELETE FROM ticket_type_options WHERE id = ?', [req.params.optionId])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
 // DELETE /api/ticket-types/:id
 router.delete('/ticket-types/:id', authenticate, requireSuperAdmin, async (req, res) => {
   try {
