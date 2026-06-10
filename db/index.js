@@ -31,6 +31,8 @@ const initDB = async () => {
     await pool.query(`CREATE TABLE IF NOT EXISTS tickets (id VARCHAR(36) PRIMARY KEY, ticket_number SERIAL, title VARCHAR(255) NOT NULL, type VARCHAR(100) NOT NULL, status VARCHAR(20) DEFAULT 'new', priority VARCHAR(20) DEFAULT 'normal', description TEXT, internal_note TEXT, client_id VARCHAR(36) NOT NULL, assignee_id VARCHAR(36), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
     // Add ticket_number column to existing installs
     await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_number SERIAL`).catch(() => {})
+    await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS is_global SMALLINT DEFAULT 0`).catch(() => {})
+    await pool.query(`ALTER TABLE recurring_tickets ADD COLUMN IF NOT EXISTS last_run TIMESTAMP`).catch(() => {})
     // Start ticket numbers at 100
     await pool.query(`CREATE SEQUENCE IF NOT EXISTS ticket_number_seq START 100`).catch(() => {})
     await pool.query(`ALTER TABLE tickets ALTER COLUMN ticket_number SET DEFAULT nextval('ticket_number_seq')`).catch(() => {})
