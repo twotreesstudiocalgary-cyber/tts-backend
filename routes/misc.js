@@ -229,3 +229,52 @@ router.post('/invoices/:id/confirm-payment', authenticate, async (req, res) => {
 })
 
 module.exports = router
+
+// ─── Recurring Tickets ────────────────────────────────────────────────────────
+
+// GET /api/recurring-tickets
+router.get('/recurring-tickets', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const [tickets] = await execute(`
+      SELECT r.*, u.name as assignee_name 
+      FROM recurring_tickets r
+      LEFT JOIN users u ON r.assignee_id = u.id
+      ORDER BY r.created_at DESC
+    `)
+    res.json({ tickets })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// POST /api/recurring-tickets
+router.post('/recurring-tickets', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { title, type, priority, description, assignee_id, scope } = req.body
+    if (!title || !type) return res.status(400).json({ message: 'Title and type are required' })
+    const { v4: uuidv4 } = require('uuid')
+    const id = uuidv4()
+    await execute(
+      'INSERT INTO recurring_tickets (id, title, type, priority, description, assignee_id, scope, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, title, type, priority || 'normal', description || '', assignee_id || null, scope || 'support_plan', req.user.id]
+    )
+    res.status(201).json({ ticket: { id, title, type, priority: priority || 'normal', description, assignee_id, scope: scope || 'support_plan', active: 1 } })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// PUT /api/recurring-tickets/:id/toggle
+router.put('/recurring-tickets/:id/toggle', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const [rows] = await execute('SELECT active FROM recurring_tickets WHERE id = ?', [req.params.id])
+    if (!rows.length) return res.status(404).json({ message: 'Not found' })
+    const newActive = rows[0].active ? 0 : 1
+    await execute('UPDATE recurring_tickets SET active = ? WHERE id = ?', [newActive, req.params.id])
+    res.json({ active: newActive })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// DELETE /api/recurring-tickets/:id
+router.delete('/recurring-tickets/:id', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    await execute('DELETE FROM recurring_tickets WHERE id = ?', [req.params.id])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
