@@ -340,14 +340,14 @@ router.post('/recurring-tickets/:id/run-now', authenticate, requireSuperAdmin, a
     if (tmpl.scope === 'specific' && tmpl.client_id) {
       // Create ticket for specific client
       await execute(
-        'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id, is_global) VALUES (?, ?, ?, ?, ?, ?, ?, 0)',
+        'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id, is_global, is_recurring) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1)',
         [id, tmpl.title, tmpl.type, tmpl.priority, tmpl.description || '', tmpl.client_id, tmpl.assignee_id || null]
       )
       res.json({ success: true, message: `"${tmpl.title}" created for specific client` })
     } else {
       // Create global ticket for all support plan clients
       await execute(
-        'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id, is_global) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+        'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id, is_global, is_recurring) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1)',
         [id, tmpl.title, tmpl.type, tmpl.priority, tmpl.description || '', 'global', tmpl.assignee_id || null]
       )
       res.json({ success: true, message: `"${tmpl.title}" created for all support plan clients` })
