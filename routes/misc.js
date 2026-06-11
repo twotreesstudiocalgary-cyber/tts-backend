@@ -156,9 +156,21 @@ router.put('/clients/:id/toggle-status', authenticate, requireSuperAdmin, async 
 router.put('/clients/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const { name, email, customer_type } = req.body
-    await execute('UPDATE clients SET name = ?, email = ?, customer_type = ? WHERE id = ?', [name, email || null, customer_type, req.params.id])
-    res.json({ client: { id: req.params.id, name, email, customer_type } })
-  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+    console.log(`Updating client ${req.params.id}:`, { name, email, customer_type })
+    if (!name) return res.status(400).json({ message: 'Name is required' })
+    const result = await execute(
+      'UPDATE clients SET name = ?, email = ?, customer_type = ?, updated_at = NOW() WHERE id = ?',
+      [name, email || null, customer_type || 'existing_customer', req.params.id]
+    )
+    console.log('Update result:', result[0])
+    // Fetch updated client to confirm
+    const [rows] = await execute('SELECT * FROM clients WHERE id = ?', [req.params.id])
+    console.log('Updated client:', rows[0]?.customer_type)
+    res.json({ client: rows[0] })
+  } catch (err) {
+    console.error('Client update error:', err)
+    res.status(500).json({ message: 'Server error: ' + err.message })
+  }
 })
 
 // DELETE /api/clients/:id
