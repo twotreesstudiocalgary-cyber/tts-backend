@@ -138,6 +138,20 @@ router.get('/clients', authenticate, requireAdmin, async (req, res) => {
   }
 })
 
+// PUT /api/clients/:id/toggle-status
+router.put('/clients/:id/toggle-status', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const [rows] = await execute('SELECT * FROM clients WHERE id = ?', [req.params.id])
+    if (rows.length === 0) return res.status(404).json({ message: 'Client not found' })
+    const newStatus = rows[0].status === 'active' ? 'inactive' : 'active'
+    await execute('UPDATE clients SET status = ? WHERE id = ?', [newStatus, req.params.id])
+    res.json({ client: { ...rows[0], status: newStatus } })
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+
 // PUT /api/clients/:id
 router.put('/clients/:id', authenticate, requireAdmin, async (req, res) => {
   try {
@@ -156,18 +170,6 @@ router.delete('/clients/:id', authenticate, requireSuperAdmin, async (req, res) 
   } catch (err) { res.status(500).json({ message: 'Server error' }) }
 })
 
-// PUT /api/clients/:id/toggle-status
-router.put('/clients/:id/toggle-status', authenticate, requireSuperAdmin, async (req, res) => {
-  try {
-    const [rows] = await execute('SELECT * FROM clients WHERE id = ?', [req.params.id])
-    if (rows.length === 0) return res.status(404).json({ message: 'Client not found' })
-    const newStatus = rows[0].status === 'active' ? 'inactive' : 'active'
-    await execute('UPDATE clients SET status = ? WHERE id = ?', [newStatus, req.params.id])
-    res.json({ client: { ...rows[0], status: newStatus } })
-  } catch (err) {
-    res.status(500).json({ message: 'Server error' })
-  }
-})
 
 // ─── Reports ──────────────────────────────────────────────────────────────────
 
