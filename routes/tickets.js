@@ -224,6 +224,23 @@ router.post('/:id/note', authenticate, requireAdmin, async (req, res) => {
 
 })
 
+// PUT /api/tickets/:id - edit ticket (superadmin only)
+router.put('/:id', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'superadmin') return res.status(403).json({ message: 'Super admin only' })
+    const { title, type, priority, description, assignee_id } = req.body
+    await execute(
+      'UPDATE tickets SET title = ?, type = ?, priority = ?, description = ?, assignee_id = ?, updated_at = NOW() WHERE id = ?',
+      [title, type, priority, description || '', assignee_id || null, req.params.id]
+    )
+    const ticket = await getTicketWithDetails(req.params.id)
+    res.json({ ticket })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
 // DELETE /api/tickets/:id
 router.delete('/:id', authenticate, async (req, res) => {
   try {
