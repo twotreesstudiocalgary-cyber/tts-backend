@@ -25,6 +25,8 @@ const initDB = async () => {
     // Allow null email for existing installs
     await pool.query(`ALTER TABLE clients ALTER COLUMN email DROP NOT NULL`).catch(() => {})
     await pool.query(`ALTER TABLE clients ALTER COLUMN password DROP NOT NULL`).catch(() => {})
+    // Fix any null customer_type values
+    await pool.query(`UPDATE clients SET customer_type = 'existing_customer' WHERE customer_type IS NULL OR customer_type = ''`).catch(() => {})
     await pool.query(`CREATE TABLE IF NOT EXISTS ticket_types (id VARCHAR(36) PRIMARY KEY, name VARCHAR(100) UNIQUE NOT NULL, active SMALLINT DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
     await pool.query(`CREATE TABLE IF NOT EXISTS ticket_type_options (id VARCHAR(36) PRIMARY KEY, ticket_type_id VARCHAR(36) NOT NULL, label VARCHAR(150) NOT NULL, sort_order INT DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
     await pool.query(`CREATE TABLE IF NOT EXISTS ticket_selected_options (id VARCHAR(36) PRIMARY KEY, ticket_id VARCHAR(36) NOT NULL, option_id VARCHAR(36) NOT NULL, option_label VARCHAR(150) NOT NULL)`)
