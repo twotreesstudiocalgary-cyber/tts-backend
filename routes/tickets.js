@@ -152,8 +152,10 @@ router.post('/', authenticate, async (req, res) => {
 
     const ticket = await getTicketWithDetails(id)
 
-    // Notify client
-    await emails.ticketCreated(ticket, ticket.client).catch(() => {})
+    // Notify client (only for real clients, not global tickets)
+    if (!ticket.is_global && ticket.client?.email) {
+      await emails.ticketCreated(ticket, ticket.client).catch(() => {})
+    }
 
     // Notify all admins
     const [admins] = await execute("SELECT email FROM users WHERE role = 'superadmin' AND status = 'active'")
@@ -179,7 +181,10 @@ router.put('/:id/status', authenticate, requireAdmin, async (req, res) => {
     const ticket = await getTicketWithDetails(req.params.id)
     if (!ticket) return res.status(404).json({ message: 'Ticket not found' })
 
-    await emails.ticketStatusUpdate(ticket, ticket.client, status).catch(() => {})
+    // Only send email if ticket has a real client with email
+    if (!ticket.is_global && ticket.client?.email) {
+      await emails.ticketStatusUpdate(ticket, ticket.client, status).catch(() => {})
+    }
 
     res.json({ ticket })
   } catch (err) {
