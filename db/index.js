@@ -1,72 +1,360 @@
-const { Pool } = require('pg')
+const express = require('express')
+const router = express.Router()
+const { v4: uuidv4 } = require('uuid')
+const { pool, execute } = require('../db')
+const { authenticate, requireAdmin, requireSuperAdmin } = require('../middleware/auth')
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+// ─── Ticket Types ────────────────────────────────────────────────────────────
+
+// GET /api/ticket-types
+router.get('/ticket-types', async (req, res) => {
+  try {
+    const [types] = await execute(`
+      SELECT tt.*, COUNT(t.id) as count 
+      FROM ticket_types tt
+      LEFT JOIN tickets t ON t.type = tt.name
+      WHERE tt.active = 1
+      GROUP BY tt.id ORDER BY tt.name ASC
+    `)
+    res.json({ types })
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' })
+  }
 })
 
-// Convert MySQL ? placeholders to PostgreSQL $1, $2...
-const execute = async (query, params = []) => {
-  let i = 0
-  const pgQuery = query.replace(/\?/g, () => `$${++i}`)
-  // Convert MySQL-style NOW() interval to PostgreSQL
-  .replace(/DATE_SUB\(NOW\(\), INTERVAL (\d+) DAY\)/g, "NOW() - INTERVAL '$1 days'")
-  .replace(/TINYINT\(1\)/g, 'SMALLINT')
-  const result = await pool.query(pgQuery, params)
-  return [result.rows, result.fields]
-}
-
-pool.execute = execute
-
-const initDB = async () => {
+// POST /api/ticket-types
+router.post('/ticket-types', authenticate, requireSuperAdmin, async (req, res) => {
   try {
-    await pool.query(`CREATE TABLE IF NOT EXISTS users (id VARCHAR(36) PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(150) UNIQUE NOT NULL, password VARCHAR(255) NOT NULL, role VARCHAR(20) DEFAULT 'staff', status VARCHAR(20) DEFAULT 'active', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
-    await pool.query(`CREATE TABLE IF NOT EXISTS clients (id VARCHAR(36) PRIMARY KEY, name VARCHAR(100) NOT NULL, email VARCHAR(150) UNIQUE, password VARCHAR(255), company VARCHAR(150), customer_type VARCHAR(50) DEFAULT 'new_customer', status VARCHAR(20) DEFAULT 'active', email_verified SMALLINT DEFAULT 0, verification_token VARCHAR(255), reset_token VARCHAR(255), reset_token_expires TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
-    // Allow null email for existing installs
-    await pool.query(`ALTER TABLE clients ALTER COLUMN email DROP NOT NULL`).catch(() => {})
-    await pool.query(`ALTER TABLE clients ALTER COLUMN password DROP NOT NULL`).catch(() => {})
-    // Fix any null customer_type values
-    await pool.query(`UPDATE clients SET customer_type = 'existing_customer' WHERE customer_type IS NULL OR customer_type = ''`).catch(() => {})
-    await pool.query(`CREATE TABLE IF NOT EXISTS ticket_types (id VARCHAR(36) PRIMARY KEY, name VARCHAR(100) UNIQUE NOT NULL, active SMALLINT DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
-    await pool.query(`CREATE TABLE IF NOT EXISTS ticket_type_options (id VARCHAR(36) PRIMARY KEY, ticket_type_id VARCHAR(36) NOT NULL, label VARCHAR(150) NOT NULL, sort_order INT DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
-    await pool.query(`CREATE TABLE IF NOT EXISTS ticket_selected_options (id VARCHAR(36) PRIMARY KEY, ticket_id VARCHAR(36) NOT NULL, option_id VARCHAR(36) NOT NULL, option_label VARCHAR(150) NOT NULL)`)
-    await pool.query(`CREATE TABLE IF NOT EXISTS tickets (id VARCHAR(36) PRIMARY KEY, ticket_number SERIAL, title VARCHAR(255) NOT NULL, type VARCHAR(100) NOT NULL, status VARCHAR(20) DEFAULT 'new', priority VARCHAR(20) DEFAULT 'normal', description TEXT, internal_note TEXT, client_id VARCHAR(36) NOT NULL, assignee_id VARCHAR(36), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
-    // Add ticket_number column to existing installs
-    await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_number SERIAL`).catch(() => {})
-    await pool.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS is_global SMALLINT DEFAULT 0`).catch(() => {})
-    await pool.query(`ALTER TABLE recurring_tickets ADD COLUMN IF NOT EXISTS last_run TIMESTAMP`).catch(() => {})
-    await pool.query(`ALTER TABLE recurring_tickets ADD COLUMN IF NOT EXISTS client_id VARCHAR(36)`).catch(() => {})
-    // Start ticket numbers at 100
-    await pool.query(`CREATE SEQUENCE IF NOT EXISTS ticket_number_seq START 100`).catch(() => {})
-    await pool.query(`ALTER TABLE tickets ALTER COLUMN ticket_number SET DEFAULT nextval('ticket_number_seq')`).catch(() => {})
-    await pool.query(`CREATE TABLE IF NOT EXISTS comments (id VARCHAR(36) PRIMARY KEY, ticket_id VARCHAR(36) NOT NULL, author_id VARCHAR(36) NOT NULL, author_type VARCHAR(20) NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
-    await pool.query(`CREATE TABLE IF NOT EXISTS invoices (id VARCHAR(36) PRIMARY KEY, ticket_id VARCHAR(36) NOT NULL, amount DECIMAL(10,2) NOT NULL, status VARCHAR(20) DEFAULT 'unpaid', paid_at TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
-    await pool.query(`CREATE TABLE IF NOT EXISTS recurring_tickets (id VARCHAR(36) PRIMARY KEY, title VARCHAR(255) NOT NULL, type VARCHAR(100) NOT NULL, priority VARCHAR(20) DEFAULT 'normal', description TEXT, assignee_id VARCHAR(36), scope VARCHAR(20) DEFAULT 'support_plan', active SMALLINT DEFAULT 1, created_by VARCHAR(36), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
-    await pool.query(`CREATE TABLE IF NOT EXISTS internal_notes (id VARCHAR(36) PRIMARY KEY, ticket_id VARCHAR(36) NOT NULL, author_id VARCHAR(36) NOT NULL, author_name VARCHAR(100) NOT NULL, text TEXT NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
-    await pool.query(`CREATE TABLE IF NOT EXISTS password_resets (id VARCHAR(36) PRIMARY KEY, email VARCHAR(150) NOT NULL, token VARCHAR(255) NOT NULL, expires_at TIMESTAMP NOT NULL, used SMALLINT DEFAULT 0, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)`)
-    console.log('✅ Database tables ready')
-
-    const { rows: types } = await pool.query('SELECT COUNT(*) as count FROM ticket_types')
-    if (parseInt(types[0].count) === 0) {
-      const { v4: uuidv4 } = require('uuid')
-      for (const name of ['New Page','Website Update','Bug Fix','SEO','Logo / Design','Hosting Support','Other']) {
-        await pool.query('INSERT INTO ticket_types (id, name) VALUES ($1, $2)', [uuidv4(), name])
-      }
-      console.log('✅ Ticket types seeded')
-    }
-
-    const { rows: users } = await pool.query('SELECT COUNT(*) as count FROM users')
-    if (parseInt(users[0].count) === 0) {
-      const bcrypt = require('bcryptjs')
-      const { v4: uuidv4 } = require('uuid')
-      const hash = await bcrypt.hash('Admin@TTS2026!', 12)
-      await pool.query('INSERT INTO users (id, name, email, password, role) VALUES ($1, $2, $3, $4, $5)', [uuidv4(), 'Admin', 'admin@twotreesstudio.ca', hash, 'superadmin'])
-      console.log('✅ Superadmin created: admin@twotreesstudio.ca / Admin@TTS2026!')
-    }
+    const { name } = req.body
+    if (!name?.trim()) return res.status(400).json({ message: 'Name is required' })
+    const [existing] = await execute('SELECT id FROM ticket_types WHERE name = ?', [name.trim()])
+    if (existing.length > 0) return res.status(409).json({ message: 'This type already exists' })
+    const id = uuidv4()
+    await execute('INSERT INTO ticket_types (id, name) VALUES (?, ?)', [id, name.trim()])
+    res.status(201).json({ type: { id, name: name.trim(), count: 0 } })
   } catch (err) {
-    console.error('DB init error:', err)
-    throw err
+    res.status(500).json({ message: 'Server error' })
   }
-}
+})
 
-module.exports = { pool, initDB, execute }
+// GET /api/ticket-types/:id/options
+router.get('/ticket-types/:id/options', async (req, res) => {
+  try {
+    const [options] = await execute('SELECT * FROM ticket_type_options WHERE ticket_type_id = ? ORDER BY sort_order ASC, created_at ASC', [req.params.id])
+    res.json({ options })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// POST /api/ticket-types/:id/options
+router.post('/ticket-types/:id/options', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { label } = req.body
+    if (!label?.trim()) return res.status(400).json({ message: 'Label is required' })
+    const id = uuidv4()
+    await execute('INSERT INTO ticket_type_options (id, ticket_type_id, label) VALUES (?, ?, ?)', [id, req.params.id, label.trim()])
+    res.status(201).json({ option: { id, ticket_type_id: req.params.id, label: label.trim() } })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// DELETE /api/ticket-types/options/:optionId
+router.delete('/ticket-types/options/:optionId', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    await execute('DELETE FROM ticket_type_options WHERE id = ?', [req.params.optionId])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// DELETE /api/ticket-types/:id
+router.delete('/ticket-types/:id', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    await execute('UPDATE ticket_types SET active = 0 WHERE id = ?', [req.params.id])
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// ─── Clients ─────────────────────────────────────────────────────────────────
+
+// POST /api/clients/create (admin creates client manually)
+router.post('/clients/create', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, email, company, customer_type } = req.body
+    if (!name) return res.status(400).json({ message: 'Name is required' })
+
+    // Only check email uniqueness if email provided
+    if (email) {
+      const [existing] = await execute('SELECT id FROM clients WHERE email = ?', [email])
+      if (existing.length > 0) return res.status(409).json({ message: 'A client with this email already exists' })
+    }
+
+    const bcrypt = require('bcryptjs')
+    const { v4: uuidv4 } = require('uuid')
+    const tempPassword = 'TTS@' + Math.random().toString(36).slice(2, 8).toUpperCase()
+    const hashed = await bcrypt.hash(tempPassword, 12)
+    const id = uuidv4()
+    const validType = ['new_customer','support_plan','existing_customer'].includes(customer_type) ? customer_type : 'new_customer'
+
+    await execute(
+      'INSERT INTO clients (id, name, email, password, company, customer_type, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [id, name, email || null, hashed, company || null, validType, 1]
+    )
+
+    // Only send email if email provided
+    if (email) {
+      const { emails } = require('../utils/email')
+      await emails.staffInvite({ name, email }, tempPassword).catch(() => {})
+    }
+
+    res.status(201).json({ client: { id, name, email: email || null, company: company || null, customer_type: validType, status: 'active', tickets: 0, created_at: new Date() } })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// GET /api/clients/:id
+router.get('/clients/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await execute(`SELECT c.*, COUNT(t.id) as tickets FROM clients c LEFT JOIN tickets t ON t.client_id = c.id WHERE c.id = ? GROUP BY c.id`, [req.params.id])
+    if (rows.length === 0) return res.status(404).json({ message: 'Client not found' })
+    res.json({ client: rows[0] })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// GET /api/clients
+router.get('/clients', authenticate, requireAdmin, async (req, res) => {
+  try {
+    res.set('Cache-Control', 'no-store')
+    const [clients] = await execute(`
+      SELECT c.id, c.name, c.email, c.company, c.status, c.customer_type, c.created_at,
+        COUNT(t.id) as tickets
+      FROM clients c
+      LEFT JOIN tickets t ON t.client_id = c.id
+      GROUP BY c.id ORDER BY c.created_at DESC
+    `)
+    res.json({ clients })
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// PUT /api/clients/:id/toggle-status
+router.put('/clients/:id/toggle-status', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const [rows] = await execute('SELECT * FROM clients WHERE id = ?', [req.params.id])
+    if (rows.length === 0) return res.status(404).json({ message: 'Client not found' })
+    const newStatus = rows[0].status === 'active' ? 'inactive' : 'active'
+    await execute('UPDATE clients SET status = ? WHERE id = ?', [newStatus, req.params.id])
+    res.json({ client: { ...rows[0], status: newStatus } })
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+
+// PUT /api/clients/:id
+router.put('/clients/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, email, customer_type } = req.body
+    console.log(`Updating client ${req.params.id}:`, { name, email, customer_type })
+    if (!name) return res.status(400).json({ message: 'Name is required' })
+    const result = await execute(
+      'UPDATE clients SET name = ?, email = ?, customer_type = ?, updated_at = NOW() WHERE id = ?',
+      [name, email || null, customer_type || 'existing_customer', req.params.id]
+    )
+    console.log('Update result:', result[0])
+    // Fetch updated client to confirm
+    const [rows] = await execute('SELECT * FROM clients WHERE id = ?', [req.params.id])
+    console.log('Updated client:', rows[0]?.customer_type)
+    res.json({ client: rows[0] })
+  } catch (err) {
+    console.error('Client update error:', err)
+    res.status(500).json({ message: 'Server error: ' + err.message })
+  }
+})
+
+// DELETE /api/clients/:id
+router.delete('/clients/:id', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    await execute('DELETE FROM tickets WHERE client_id = ?', [req.params.id])
+    await execute('DELETE FROM clients WHERE id = ?', [req.params.id])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+
+// ─── Reports ──────────────────────────────────────────────────────────────────
+
+// GET /api/reports/summary
+router.get('/reports/summary', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const [[{ total }]] = await execute('SELECT COUNT(*) as total FROM tickets')
+    const [[{ open }]] = await execute("SELECT COUNT(*) as open FROM tickets WHERE status = 'new'")
+    const [[{ inprogress }]] = await execute("SELECT COUNT(*) as inprogress FROM tickets WHERE status = 'inprogress'")
+    const [[{ complete }]] = await execute("SELECT COUNT(*) as complete FROM tickets WHERE status = 'complete'")
+    const [[{ overdue }]] = await execute("SELECT COUNT(*) as overdue FROM tickets WHERE status IN ('new','inprogress') AND updated_at < NOW() - INTERVAL '3 days'")
+    const [[{ unpaidInvoices }]] = await execute("SELECT COUNT(*) as unpaidInvoices FROM invoices WHERE status = 'unpaid'")
+    const [[{ unpaidAmount }]] = await execute("SELECT COALESCE(SUM(amount),0) as unpaidAmount FROM invoices WHERE status = 'unpaid'")
+
+    const [byType] = await execute(`
+      SELECT tt.name, COUNT(t.id) as count 
+      FROM ticket_types tt LEFT JOIN tickets t ON t.type = tt.name 
+      WHERE tt.active = 1 GROUP BY tt.id ORDER BY count DESC
+    `)
+
+    res.json({ total, open, inprogress, complete, overdue, unpaidInvoices, unpaidAmount, byType })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// ─── Stripe Payment ───────────────────────────────────────────────────────────
+
+// POST /api/invoices/:id/pay
+router.post('/invoices/:id/pay', authenticate, async (req, res) => {
+  try {
+    const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY)
+    const [rows] = await execute('SELECT * FROM invoices WHERE id = ?', [req.params.id])
+    if (rows.length === 0) return res.status(404).json({ message: 'Invoice not found' })
+    if (rows[0].status === 'paid') return res.status(400).json({ message: 'Invoice already paid' })
+
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(rows[0].amount * 100),
+      currency: 'cad',
+      metadata: { invoice_id: req.params.id, ticket_id: rows[0].ticket_id }
+    })
+
+    res.json({ clientSecret: paymentIntent.client_secret })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Payment error' })
+  }
+})
+
+// POST /api/invoices/:id/confirm-payment
+router.post('/invoices/:id/confirm-payment', authenticate, async (req, res) => {
+  try {
+    await execute("UPDATE invoices SET status = 'paid', paid_at = NOW() WHERE id = ?", [req.params.id])
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+module.exports = router
+
+// ─── Recurring Tickets ────────────────────────────────────────────────────────
+
+// GET /api/recurring-tickets
+router.get('/recurring-tickets', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const [tickets] = await execute(`
+      SELECT r.*, u.name as assignee_name 
+      FROM recurring_tickets r
+      LEFT JOIN users u ON r.assignee_id = u.id
+      ORDER BY r.created_at DESC
+    `)
+    res.json({ tickets })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// POST /api/recurring-tickets
+router.post('/recurring-tickets', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { title, type, priority, description, assignee_id, scope, client_id } = req.body
+    if (!title || !type) return res.status(400).json({ message: 'Title and type are required' })
+    const { v4: uuidv4 } = require('uuid')
+    const id = uuidv4()
+    const finalScope = scope || 'global'
+    const finalClientId = finalScope === 'specific' ? (client_id || null) : null
+    await execute(
+      'INSERT INTO recurring_tickets (id, title, type, priority, description, assignee_id, scope, client_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, title, type, priority || 'normal', description || '', assignee_id || null, finalScope, finalClientId, req.user.id]
+    )
+    res.status(201).json({ ticket: { id, title, type, priority: priority || 'normal', description, assignee_id, scope: finalScope, client_id: finalClientId, active: 1 } })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// PUT /api/recurring-tickets/:id/toggle
+router.put('/recurring-tickets/:id/toggle', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const [rows] = await execute('SELECT active FROM recurring_tickets WHERE id = ?', [req.params.id])
+    if (!rows.length) return res.status(404).json({ message: 'Not found' })
+    const newActive = rows[0].active ? 0 : 1
+    await execute('UPDATE recurring_tickets SET active = ? WHERE id = ?', [newActive, req.params.id])
+    res.json({ active: newActive })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// DELETE /api/recurring-tickets/:id
+router.delete('/recurring-tickets/:id', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    await execute('DELETE FROM recurring_tickets WHERE id = ?', [req.params.id])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// PUT /api/recurring-tickets/:id
+router.put('/recurring-tickets/:id', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { title, type, priority, description, assignee_id } = req.body
+    await execute('UPDATE recurring_tickets SET title = ?, type = ?, priority = ?, description = ?, assignee_id = ? WHERE id = ?',
+      [title, type, priority || 'normal', description || '', assignee_id || null, req.params.id])
+    res.json({ success: true })
+  } catch (err) { res.status(500).json({ message: 'Server error' }) }
+})
+
+// POST /api/recurring-tickets/run-now
+router.post('/recurring-tickets/run-now', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { v4: uuidv4 } = require('uuid')
+    const [templates] = await execute('SELECT * FROM recurring_tickets WHERE active = 1')
+    let created = 0
+    for (const tmpl of templates) {
+      // Create ONE global ticket per template (not per client)
+      const id = uuidv4()
+      await execute(
+        'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id, is_global) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+        [id, tmpl.title, tmpl.type, tmpl.priority, tmpl.description || '', 'global', tmpl.assignee_id || null]
+      )
+      await execute('UPDATE recurring_tickets SET last_run = NOW() WHERE id = ?', [tmpl.id])
+      created++
+    }
+    res.json({ success: true, created, message: `Created ${created} ticket(s) for all support plan clients` })
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// POST /api/recurring-tickets/:id/run-now
+router.post('/recurring-tickets/:id/run-now', authenticate, requireSuperAdmin, async (req, res) => {
+  try {
+    const { v4: uuidv4 } = require('uuid')
+    const [rows] = await execute('SELECT * FROM recurring_tickets WHERE id = ?', [req.params.id])
+    if (!rows.length) return res.status(404).json({ message: 'Not found' })
+    const tmpl = rows[0]
+    const id = uuidv4()
+    if (tmpl.scope === 'specific' && tmpl.client_id) {
+      // Create ticket for specific client
+      await execute(
+        'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id, is_global, is_recurring) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1)',
+        [id, tmpl.title, tmpl.type, tmpl.priority, tmpl.description || '', tmpl.client_id, tmpl.assignee_id || null]
+      )
+      res.json({ success: true, message: `"${tmpl.title}" created for specific client` })
+    } else {
+      // Create global ticket for all support plan clients
+      await execute(
+        'INSERT INTO tickets (id, title, type, priority, description, client_id, assignee_id, is_global, is_recurring) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1)',
+        [id, tmpl.title, tmpl.type, tmpl.priority, tmpl.description || '', 'global', tmpl.assignee_id || null]
+      )
+      res.json({ success: true, message: `"${tmpl.title}" created for all support plan clients` })
+    }
+    await execute('UPDATE recurring_tickets SET last_run = NOW() WHERE id = ?', [tmpl.id])
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({ message: 'Server error' })
+  }
+})
