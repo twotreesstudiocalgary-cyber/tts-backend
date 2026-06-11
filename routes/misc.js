@@ -125,8 +125,9 @@ router.get('/clients/:id', authenticate, requireAdmin, async (req, res) => {
 // GET /api/clients
 router.get('/clients', authenticate, requireAdmin, async (req, res) => {
   try {
+    res.set('Cache-Control', 'no-store')
     const [clients] = await execute(`
-      SELECT c.id, c.name, c.email, c.company, c.status, c.created_at,
+      SELECT c.id, c.name, c.email, c.company, c.status, c.customer_type, c.created_at,
         COUNT(t.id) as tickets
       FROM clients c
       LEFT JOIN tickets t ON t.client_id = c.id
